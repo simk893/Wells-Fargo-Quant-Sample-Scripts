@@ -1,1 +1,1 @@
-
+In this project I used the Federal Reserve API to call all Daily, Monthly, Quarterly, and Annual series ID's. I first analyzed them by data size (# of observations) and use frequency (popularity) to determine which data series I can exclude to reduce dimensionality and computational complexity. After organizing, standardizing, and reducing the dimensionality of the data (via PCA), I created conditional Markov transition matrixes in hopes of deriving numerically tighter confidence bounds on equity indices.
