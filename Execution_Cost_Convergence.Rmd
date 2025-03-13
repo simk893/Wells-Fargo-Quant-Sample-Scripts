@@ -1,0 +1,197 @@
+---
+title: "Convergence"
+author: "Simeon Kolev"
+date: "`r Sys.Date()`"
+output: html_document
+---
+```{r}
+library(ggplot2)
+
+#Model Parameters
+o = 5*(10^-5)
+y = 5*(10^0)
+p = 5*(10^-1)
+var_e = (0.125)^2
+var_n = 0.001
+
+#Simulation Parameters
+TIMES = 20
+PRICE = 50
+SHARES = 100000
+
+#Convergence Parameters
+SIMULATIONS = 100
+Simulations = seq(1, SIMULATIONS, 1)
+Improvement_APP = NULL
+Improvement_APP_I = NULL
+Improvement_APP_I_AR = NULL
+
+#Cummulative Costs
+Cum_Cost1 = 0
+Cum_Cost2 = 0
+Cum_Cost3 = 0
+
+for (s in 1:SIMULATIONS){ #from 1 to 100 simulations
+  set.seed(s)
+  
+  #Additive Permanent Price Impact
+  
+  t = TIMES #Time periods
+  Periods = TIMES #Time periods
+
+  P1 = NULL; P1[1] = PRICE #Price vector
+  B1 = NULL; B1[1] = 0 #Order vector
+  S1 = NULL; S1[1] = SHARES #Share remaining vector
+  V1 = NULL; V1[1] = 0 #Expected total cost vector
+  A1 = NULL; A1[1] = 0 #Actual total cost vector
+  
+  e = rnorm(n=t, mean=0, sd=sqrt(var_e)) #Epsilon (price noise) calibrated to be $0.125 or one 'tick' (per period)
+  n = rnorm(n=t, mean=0, sd=sqrt(var_n)) #Eta (information noise)
+    
+  for (i in 2:(t+1)){ #Calculating optimal order size
+    B1[i] = S1[i-1]/(t-i+2) #Order size
+    S1[i] = S1[i-1] - B1[i] #Shares remaining
+  
+    P1[i] = P1[i-1] + o*B1[i] + e[i-1] #Price equation
+  
+    V1[i] = S1[i-1]*P1[i-1] + ((o*(S1[i-1]^2))/(2))*((t-i+3)/(t-i+2)) #Expected cost
+    A1[i] = A1[i-1] + P1[i]*B1[i] #Actual cost
+  }
+  
+  Cost1 = A1[t+1]
+  Improvement1 = (V1[2]-A1[t+1])/S1[1]
+  Theoretical1 = V1[2]
+
+  #Additive Permanent Price Impact with Information
+    
+  P2 = NULL; P2[1] = PRICE #Price Vector
+  B2 = NULL; B2[1] = 0 #Order vector
+  S2 = NULL; S2[1] = SHARES #Share remaining vector
+  X2 = NULL; X2[1] = 0 #Information vector
+  V2 = NULL; V2[1] = 0 #Expected total cost vector
+  A2 = NULL; A2[1] = 0 #Actual total cost vector
+    
+  #Bellman parameters
+  a2 = NULL; a2[1] = o
+  b2 = NULL; b2[1] = y
+  c2 = NULL; c2[1] = 0
+  d2 = NULL; d2[1] = 0
+  d12 = NULL; d12[1] = 1
+  d22 = NULL; d22[1] = 0
+    
+  for (i in 2:t){ #Calculating parameters
+    a2[i] = (o*(i+1))/(2*i)
+    b2[i] = y + (o*p*b2[i-1])/(2*a2[i-1])
+    c2[i] = (p^2)*c2[i-1] - ((p^2)*(b2[i-1]^2))/(4*a2[i-1])
+    d2[i] = d2[i-1] + c2[i-1]*var_n
+    d12[i] = (1/i)
+    d22[i] = (p*b2[i-1])/(2*a2[i-1])
+  }
+
+  for (i in 2:(t+1)){ #Calculating optimal costs
+    B2[i] = d12[t-i+2]*S2[i-1] + d22[t-i+2]*X2[i-1] #Order size
+    S2[i] = S2[i-1] - B2[i] #Shares size
+  
+    X2[i] = p*X2[i-1] + n[i-1] #Information equation
+    P2[i] = P2[i-1] + o*B2[i] + y*X2[i] + e[i-1] #Price equation
+
+    V2[i] = S2[i-1]*P2[i-1] + a2[t-i+2]*(S2[i-1]^2) + b2[t-i+2]*X2[i-1]*S2[i-1] + c2[t-i+2]*(X2[i-1]^2) + d2[t-i+2] #Expected cost
+    A2[i] = A2[i-1] + P2[i]*B2[i] #Actual cost
+  }
+
+  Cost2 = A2[t+1]
+  Improvement2 = (V2[2]-A2[t+1])/S2[1]
+  Theoretical2 = V2[2]
+  
+  #Additive Permanent Price Impact with Information, Auto-regressive Rho & Eta
+  
+  Price = NULL; Price[1] = PRICE
+  Shares = NULL; Shares[1] = SHARES
+  Bought = NULL; Bought[1] = 0
+  Information = NULL; Information[1] = 0
+  Accumulated = NULL; Accumulated[1] = 0
+  Expected = NULL; Expected[1] = 0
+
+  cov = NULL; cov[1] = 0
+  var = NULL; var[1] = 0
+
+  p_hat = NULL; p_hat[1] = 0 #Auto-regressive estimated Rho
+  var_n_hat = NULL; var_n_hat[1] = 0 #Auto-regressive estimated variance of Eta
+  
+  for (j in 2:(Periods+1)){
+    t = Periods - j + 2 #Time periods
+      
+    P3 = NULL; P3[1] = Price[j-1] #Price Vector
+    B3 = NULL; B3[1] = 0 #Order vector
+    S3 = NULL; S3[1] = Shares[j-1] #Share remaining vector
+    X3 = NULL; X3[1] = Information[j-1] #Information vector
+    V3 = NULL; V3[1] = 0 #Expected total cost vector
+    A3 = NULL; A3[1] = 0 #Actual total cost vector
+      
+    #Bellman parameters
+    a3 = NULL; a3[1] = o
+    b3 = NULL; b3[1] = y
+    c3 = NULL; c3[1] = 0
+    d3 = NULL; d3[1] = 0
+    d13 = NULL; d13[1] = 1
+    d23 = NULL; d23[1] = 0
+
+    for (i in 2:(t+1)){ #Calculating parameters
+      a3[i] = o*(i+1)/(2*i)
+      b3[i] = y + (o*p_hat[j-1]*b3[i-1])/(2*a3[i-1])
+      c3[i] = (p_hat[j-1]^2)*c3[i-1] - ((p_hat[j-1]^2)*(b3[i-1]^2))/(4*a3[i-1])
+      d3[i] = d3[i-1] + c3[i-1]*(var_n_hat[j-1])
+      d13[i] = 1/i
+      d23[i] = (p_hat[j-1]*b3[i-1])/(2*a3[i-1])
+    }
+
+    for (i in 2:(t+1)) { #Calculating optimal costs
+      B3[i] = d13[t-i+2]*S3[i-1] + d23[t-i+2]*X3[i-1] #Order size
+      S3[i] = S3[i-1] - B3[i] #Shares size
+  
+      X3[i] = p*X3[i-1] + n[j-1] #Information equation
+      P3[i] = P3[i-1] + o*B3[i] + y*X3[i] + e[j-1] #Price equation
+
+      V3[i] = S3[i-1]*P3[i-1] + a3[t-i+2]*(S3[i-1]^2) + b3[t-i+2]*X3[i-1]*S3[i-1] + c3[t-i+2]*(X3[i-1]^2) + d3[t-i+2] #Expected cost
+      A3[i] = A3[i-1] + P3[i]*B3[i] #Actual cost
+    } 
+
+    Bought[j] = B3[2]
+    Shares[j] = S3[2]
+
+    Information[j] = X3[2]
+    Price[j] = P3[2]
+  
+    Expected[j] = V3[2]
+    Accumulated[j] = Accumulated[j-1] + P3[2]*B3[2]
+      
+    cov[j] = j*sum(Information[1:(j-1)]*Information[2:j]) - sum(Information[1:j])^2
+    var[j] = j*sum(Information[1:j]^2)-sum(Information[1:j])^2
+
+    p_hat[j] = cov[j]/var[j]
+    var_n_hat[j] = (var[j]*(1-(p_hat[j]^2)))/(j^2)
+  } 
+  
+  Cost3 = Accumulated[Periods+1]
+  Improvement3 = (Expected[2]-Accumulated[Periods+1])/Shares[1]
+  Theoretical3 = Expected[2]
+
+  Cum_Cost1 = Cum_Cost1 + Cost1
+  Cum_Cost2 = Cum_Cost2 + Cost2
+  Cum_Cost3 = Cum_Cost3 + Cost3
+  
+  Improvement_APP[s] = Theoretical1-(Cum_Cost1/s)
+  Improvement_APP_I[s] = Theoretical1-(Cum_Cost2/s)
+  Improvement_APP_I_AR[s] = Theoretical1-(Cum_Cost3/s)
+}
+  
+con = ggplot() +
+  geom_line(aes(x=Simulations, y=Improvement_APP), color='green', linetype='dashed') +
+  geom_line(aes(x=Simulations, y=Improvement_APP_I), color='blue', linetype='dashed') +
+  geom_line(aes(x=Simulations, y=Improvement_APP_I_AR), color='red', linetype='dashed') +
+  geom_hline(yintercept=0, color='black', linetype='solid') +
+  geom_text(aes(x=0.85*SIMULATIONS, y=-30000, label=paste('Naive:', round(Improvement_APP[SIMULATIONS]))), color='green') +
+  geom_text(aes(x=0.85*SIMULATIONS, y=-40000, label=paste('Informed:', round(Improvement_APP_I[SIMULATIONS]))), color='blue') +
+  geom_text(aes(x=0.85*SIMULATIONS, y=-50000, label=paste('Autoregressive', round(Improvement_APP_I_AR[SIMULATIONS]))), color='red') +
+  labs(x='Simulation', y='Performance') + theme_minimal(); con
+```

@@ -1,0 +1,511 @@
+---
+title: "Get_Financials"
+output: html_document
+date: "2023-11-10"
+---
+# Tradier
+
+### Get Historic Quote
+```{r}
+get_historic_quote <- function(ticker, start) {
+
+  # Required packages
+  require(httr)
+  require(jsonlite)
+
+  # Define Tradier URL and API key
+  url <- "https://api.tradier.com/v1/markets/history"
+  api_key <- "WoMo7rA3s9UZWDYDAW6F8QfdHX3s"
+
+
+  # Define desired parameters and header
+  params <- list(symbol = ticker,
+                 interval = "daily",
+                 start = start,
+                 end = Sys.Date(),
+                 session_filter = "all")
+
+  headers <- c("Authorization" = paste("Bearer", api_key, sep = " "),
+               "Accept" = "application/json")
+
+  # Make an HTTP request to the Tradier API
+  response <- GET(url = url,
+                  query = params,
+                  add_headers(headers))
+
+  # Parse the JSON response and return
+  data <- fromJSON(content(response, "text"))[[1]][[1]]
+
+  return(data)
+}
+```
+
+### Get Option Chain
+```{r}
+get_option_chain <- function(ticker, maturity) {
+
+  # Required packages
+  require(httr)
+  require(jsonlite)
+
+  # Define Tradier URL and API key
+  url <- "https://api.tradier.com/v1/markets/options/chains"
+  api_key <- "WoMo7rA3s9UZWDYDAW6F8QfdHX3s"
+
+  # Define desired parameters and header
+  params <- list(symbol = ticker,
+                 expiration = maturity,
+                 greeks = TRUE)
+
+  headers <- c("Authorization" = paste("Bearer", api_key, sep = " "),
+               "Accept" = "application/json")
+
+  # Make an HTTP request to the Tradier API
+  response <- GET(url = url,
+                  query = params,
+                  add_headers(headers))
+
+  # Parse the JSON response and return
+  data <- fromJSON(content(response, "text"))
+
+  return(data)
+}
+```
+
+### Get Option Quote
+```{r}
+get_option_quote <- function(option) {
+
+  # Required packages
+  require(httr)
+  require(jsonlite)
+
+  # Define Tradier URL and API key
+  url <- "https://api.tradier.com/v1/markets/quotes"
+  api_key <- "WoMo7rA3s9UZWDYDAW6F8QfdHX3s"
+
+  # Define desired parameters and header
+  params <- list(symbols = option,
+                 greeks = TRUE)
+
+  headers <- c("Authorization" = paste("Bearer", api_key, sep = " "),
+               "Accept" = "application/json")
+
+  # Make an HTTP request to the Tradier API
+  response <- GET(url = url,
+                  query = params,
+                  add_headers(headers))
+
+  # Parse the JSON response and return
+  data <- fromJSON(content(response, "text"))
+
+  return(data)
+}
+```
+
+
+
+
+
+
+# FinancialModelingPrep
+
+### Get Ticker
+```{r}
+get_ticker <- function(cusip) {
+
+  # Required packages
+  require(httr)
+  require(jsonlite)
+
+  # Define Financial Modeling Prep URL and API key
+  url <- "https://financialmodelingprep.com/api/v3/cusip/"
+  api_key <- "a56fe3a3a6ea2f17381db6f2f4e5db66"
+
+  # Define desired parameters and header
+  params <- list("datatype" = "json",
+                 "apikey" = api_key)
+
+  headers <- c("Upgrade-Insecure-Requests" = "1")
+
+  # Make an HTTP request to the Financial Modeling Prep API
+  response <- GET(url = paste(url, cusip, sep = ""),
+                  query = params,
+                  add_headers(headers))
+
+  # Parse the JSON response and return
+  data <- fromJSON(content(response, "text"))
+
+  return(data)
+}
+```
+
+### Get Profile
+```{r}
+get_profile <- function(ticker) {
+
+  # Required packages
+  require(httr)
+  require(jsonlite)
+
+  # Define Financial Modeling Prep URL and API key
+  url <- "https://financialmodelingprep.com/api/v3/profile/"
+  api_key <- "a56fe3a3a6ea2f17381db6f2f4e5db66"
+
+  # Define desired parameters and header
+  params <- list("datatype" = "json",
+                 "apikey" = api_key)
+
+  headers <- c("Upgrade-Insecure-Requests" = "1")
+
+  # Make an HTTP request to the Financial Modeling Prep API
+  response <- GET(url = paste(url, ticker, sep = ""),
+                  query = params,
+                  add_headers(headers))
+
+  # Parse the JSON response and return
+  data <- fromJSON(content(response, "text"))
+
+  return(data)
+}
+```
+
+### Get Stock Quote
+```{r}
+get_stock_quote <- function(ticker) {
+
+  # Required packages
+  require(httr)
+  require(jsonlite)
+
+  # Define Financial Modeling Prep URL and API key
+  url <- "https://financialmodelingprep.com/api/v3/quote/"
+  api_key <- "a56fe3a3a6ea2f17381db6f2f4e5db66"
+
+  # Define desired parameters and header
+  params <- list("datatype" = "json",
+                 "apikey" = api_key)
+
+  headers <- c("Upgrade-Insecure-Requests" = "1")
+
+  # Make an HTTP request to the Financial Modeling Prep API
+  response <- GET(url = paste(url, ticker, sep = ""),
+                  query = params,
+                  add_headers(headers))
+
+  # Parse the JSON response and return
+  data <- fromJSON(content(response, "text"))
+
+  return(data)
+}
+```
+
+### Get Rating
+```{r}
+get_rating <- function(ticker) {
+
+  # Required packages
+  require(httr)
+  require(jsonlite)
+
+  # Define Financial Modeling Prep URL and API key
+  url <- "https://financialmodelingprep.com/api/v3/rating/"
+  api_key <- "a56fe3a3a6ea2f17381db6f2f4e5db66"
+
+  # Define desired parameters and header
+  params <- list("datatype" = "json",
+                 "apikey" = api_key)
+
+  headers <- c("Upgrade-Insecure-Requests" = "1")
+
+  # Make an HTTP request to the Financial Modeling Prep API
+  response <- GET(url = paste(url, ticker, sep = ""),
+                  query = params,
+                  add_headers(headers))
+
+  # Parse the JSON response and return
+  data <- fromJSON(content(response, "text"))
+
+  return(data)
+}
+```
+
+### Get Historic Price
+```{r}
+get_historic_price <- function(ticker) {
+
+  # Required packages
+  require(httr)
+  require(jsonlite)
+
+  # Define Financial Modeling Prep URL and API key
+  url <- "https://financialmodelingprep.com/api/v3/historical-price-full/"
+  api_key <- "a56fe3a3a6ea2f17381db6f2f4e5db66"
+
+  # Define desired parameters and header
+  params <- list("datatype" = "json",
+                 "apikey" = api_key)
+
+  headers <- c("Upgrade-Insecure-Requests" = "1")
+
+  # Make an HTTP request to the Financial Modeling Prep API
+  response <- GET(url = paste(url, ticker, sep = ""),
+                  query = params,
+                  add_headers(headers))
+
+  # Parse the JSON response and return
+  data <- fromJSON(content(response, "text"))
+
+  return(data)
+}
+```
+
+### Get Historic Technical Indicators
+```{r}
+get_historic_technical_indicators <- function(ticker, indicator, period) {
+
+  # Required packages
+  require(httr)
+  require(jsonlite)
+
+  # Define Financial Modeling Prep URL and API key
+  url <- "https://financialmodelingprep.com/api/v3/technical_indicator/1day/"
+  api_key <- "a56fe3a3a6ea2f17381db6f2f4e5db66"
+
+  # Define desired parameters and header
+  params <- list("datatype" = "json",
+                 "type" = indicator,
+                 "period" = period,
+                 "apikey" = api_key)
+
+  headers <- c("Upgrade-Insecure-Requests" = "1")
+
+  # Make an HTTP request to the Financial Modeling Prep API
+  response <- GET(url = paste(url, ticker, sep = ""),
+                  query = params,
+                  add_headers(headers))
+
+  # Parse the JSON response and return
+  data <- fromJSON(content(response, "text"))
+
+  return(data)
+}
+```
+
+### Get Financial Report
+```{r}
+get_financial_report <- function(ticker, period) {
+
+  # Required packages
+  require(httr)
+  require(jsonlite)
+
+  # Define Financial Modeling Prep URL and API key
+  url <- "https://financialmodelingprep.com/api/v3/financial-statement-full-as-reported/"
+  api_key <- "a56fe3a3a6ea2f17381db6f2f4e5db66"
+
+  # Define desired parameters and header
+  params <- list("datatype" = "json",
+                 "period" = period,
+                 "limit" = 1,
+                 "apikey" = api_key)
+
+  headers <- c("Upgrade-Insecure-Requests" = "1")
+
+  # Make an HTTP request to the Financial Modeling Prep API
+  response <- GET(url = paste(url, ticker, sep = ""),
+                  query = params,
+                  add_headers(headers))
+
+  # Parse the JSON response and return
+  data <- fromJSON(content(response, "text"))
+
+  return(data)
+}
+```
+
+### Get Income Statements
+```{r}
+get_income_statements <- function(ticker, period) {
+
+  # Required packages
+  require(httr)
+  require(jsonlite)
+
+  # Define Financial Modeling Prep URL and API key
+  url <- "https://financialmodelingprep.com/api/v3/income-statement/"
+  api_key <- "a56fe3a3a6ea2f17381db6f2f4e5db66"
+
+  # Define desired parameters and header
+  params <- list("datatype" = "json",
+                 "period" = period,
+                 "apikey" = api_key)
+
+  headers <- c("Upgrade-Insecure-Requests" = "1")
+
+  # Make an HTTP request to the Financial Modeling Prep API
+  response <- GET(url = paste(url, ticker, sep = ""),
+                  query = params,
+                  add_headers(headers))
+
+  # Parse the JSON response and return
+  data <- fromJSON(content(response, "text"))
+
+  return(data)
+}
+```
+
+### Get Balance Sheet Statements
+```{r}
+get_balance_sheet_statements <- function(ticker, period) {
+
+  # Required packages
+  require(httr)
+  require(jsonlite)
+
+  # Define Financial Modeling Prep URL and API key
+  url <- "https://financialmodelingprep.com/api/v3/balance-sheet-statement/"
+  api_key <- "a56fe3a3a6ea2f17381db6f2f4e5db66"
+
+  # Define desired parameters and header
+  params <- list("datatype" = "json",
+                 "period" = period,
+                 "apikey" = api_key)
+
+  headers <- c("Upgrade-Insecure-Requests" = "1")
+
+  # Make an HTTP request to the Financial Modeling Prep API
+  response <- GET(url = paste(url, ticker, sep = ""),
+                  query = params,
+                  add_headers(headers))
+
+  # Parse the JSON response and return
+  data <- fromJSON(content(response, "text"))
+
+  return(data)
+}
+```
+
+### Get Cash Flow Statements
+```{r}
+get_cash_flow_statements <- function(ticker, period) {
+
+  # Required packages
+  require(httr)
+  require(jsonlite)
+
+  # Define Financial Modeling Prep URL and API key
+  url <- "https://financialmodelingprep.com/api/v3/cash-flow-statement/"
+  api_key <- "a56fe3a3a6ea2f17381db6f2f4e5db66"
+
+  # Define desired parameters and header
+  params <- list("datatype" = "json",
+                 "period" = period,
+                 "apikey" = api_key)
+
+  headers <- c("Upgrade-Insecure-Requests" = "1")
+
+  # Make an HTTP request to the Financial Modeling Prep API
+  response <- GET(url = paste(url, ticker, sep = ""),
+                  query = params,
+                  add_headers(headers))
+
+  # Parse the JSON response and return
+  data <- fromJSON(content(response, "text"))
+
+  return(data)
+}
+```
+
+### Get Key Metrics
+```{r}
+get_key_metrics <- function(ticker, period) {
+
+  # Required packages
+  require(httr)
+  require(jsonlite)
+
+  # Define Financial Modeling Prep URL and API key
+  url <- "https://financialmodelingprep.com/api/v3/key-metrics/"
+  api_key <- "a56fe3a3a6ea2f17381db6f2f4e5db66"
+
+  # Define desired parameters and header
+  params <- list("datatype" = "json",
+                 "period" = period,
+                 "apikey" = api_key)
+
+  headers <- c("Upgrade-Insecure-Requests" = "1")
+
+  # Make an HTTP request to the Financial Modeling Prep API
+  response <- GET(url = paste(url, ticker, sep = ""),
+                  query = params,
+                  add_headers(headers))
+
+  # Parse the JSON response and return
+  data <- fromJSON(content(response, "text"))
+
+  return(data)
+}
+```
+
+### Get Ratios
+```{r}
+get_key_metrics <- function(ticker, period) {
+
+  # Required packages
+  require(httr)
+  require(jsonlite)
+
+  # Define Financial Modeling Prep URL and API key
+  url <- "https://financialmodelingprep.com/api/v3/ratios/"
+  api_key <- "a56fe3a3a6ea2f17381db6f2f4e5db66"
+
+  # Define desired parameters and header
+  params <- list("datatype" = "json",
+                 "period" = period,
+                 "apikey" = api_key)
+
+  headers <- c("Upgrade-Insecure-Requests" = "1")
+
+  # Make an HTTP request to the Financial Modeling Prep API
+  response <- GET(url = paste(url, ticker, sep = ""),
+                  query = params,
+                  add_headers(headers))
+
+  # Parse the JSON response and return
+  data <- fromJSON(content(response, "text"))
+
+  return(data)
+}
+```
+
+
+
+
+
+
+
+
+# Testing on "APPL"
+```{r}
+# Tradier
+#get_historic_quote("AAPL", "2023-01-01")
+#get_option_chain("AAPL", "2023-12-29")
+#get_option_quote("AAPL", "AAPL231229C00050000")
+
+# FinancialModelingPrep
+#get_ticker("037833100")
+#get_profile("AAPL")
+#get_stock_quote("AAPL")
+#get_rating("AAPL")
+#get_historic_price("AAPL")
+#get_historic_technical_indicators("AAPL", "sma", 1)
+#get_financial_report("AAPL","quarter")
+#get_income_statements("AAPL","quarter")
+#get_balance_sheet_statements("AAPL","quarter")
+#get_cash_flow_statements("AAPL","quarter")
+#get_key_metrics("AAPL","quarter")
+#get_ratios("AAPL","quarter")
+```
+
+

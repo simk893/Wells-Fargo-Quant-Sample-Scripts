@@ -1,0 +1,292 @@
+---
+title: "Deviation"
+author: "Simeon Kolev"
+date: "`r Sys.Date()`"
+output: html_document
+---
+# Setup
+
+```{r}
+library(ggplot2)
+set.seed(1)
+
+#Simulation Parameters
+TIMES = 20
+PRICE = 50
+SHARES = 100000
+
+#Model Parameters
+o = 5*(10^-5)
+y = 5*(10^0)
+p = 5*(10^-1)
+var_e = (0.125)^2
+var_n = 0.001
+
+#Random Parameters
+e = rnorm(n=TIMES, mean=0, sd=sqrt(var_e)) #Epsilon (price noise) calibrated to be $0.125 or one 'tick' (per period)
+n = rnorm(n=TIMES, mean=0, sd=sqrt(var_n)) #Eta (information noise)
+```
+
+# Additive Permanent Price Impact
+
+```{r}
+t = TIMES #time periods
+
+P = NULL; P[1] = PRICE #Price vector
+B = NULL; B[1] = 0 #Order vector
+S = NULL; S[1] = SHARES #Share remaining vector
+V = NULL; V[1] = 0 #Expected total cost vector
+A = NULL; A[1] = 0 #Actual total cost vecto
+
+for (i in 2:(t+1)){ #Calculating optimal order size
+  B[i] = S[i-1]/(t-i+2) #Order size
+  S[i] = S[i-1] - B[i] #Shares remaining
+  
+  P[i] = P[i-1] + o*B[i] + e[i-1] #Price equation
+  
+  V[i] = S[i-1]*P[i-1] + ((o*(S[i-1]^2))/(2))*((t-i+3)/(t-i+2)) #Expected cost
+  A[i] = A[i-1] + P[i]*B[i] #Actual cost
+}
+
+Deviation1 = NULL; Deviation1[1] = 0
+
+for (i in 2:(t+1)){
+  if (i == 2){
+    Deviation1[i] = (V[i]-V[i+1])-(A[i]-0)
+  } else if (i == (t+1)){
+    Deviation1[i] = (V[i]-0)-(A[i]-A[i-1])
+  } else {
+    Deviation1[i] = (V[i]-V[i+1])-(A[i]-A[i-1])
+  }
+}
+
+DF_naive = data.frame(`Period` = seq(0, t, 1),
+                      `Price` = P,
+                      `Shares Bought` = B,
+                      `Shares Remaining` = S,
+                      `Accumulated Cost` = A,
+                      `Expected Cost` = V); DF_naive
+
+cat("Actual Cost:", A[t+1], "\n")
+cat("Expected Cost:", V[2], "\n")
+cat("Improvement:", (V[2]-A[t+1])/S[1], "\n")
+
+# dev1 = ggplot() +
+#   geom_line(aes(x=seq(1, TIMES, 1), y=Deviation1[-1]), color='green', linetype='dashed') +
+#   geom_hline(yintercept=0, color='black', linetype='solid',) +
+#   labs(x='Period', y='Deviation') + theme_classic(); dev1
+```
+
+# Additive Permanent Price Impact with Information
+
+```{r}
+t = TIMES #Time periods
+  
+P = NULL; P[1] = PRICE #Price Vector
+B = NULL; B[1] = 0 #Order vector
+S = NULL; S[1] = SHARES #Share remaining vector
+X = NULL; X[1] = 0 #Information vector
+V = NULL; V[1] = 0 #Expected total cost vector
+A = NULL; A[1] = 0 #Actual total cost vector
+
+#Bellman parameters
+a = NULL; a[1] = o
+b = NULL; b[1] = y
+c = NULL; c[1] = 0
+d = NULL; d[1] = 0
+d1 = NULL; d1[1] = 1
+d2 = NULL; d2[1] = 0
+
+for (i in 2:t){ #Calculating parameters
+  a[i] = (o*(i+1))/(2*i)
+  b[i] = y + (o*p*b[i-1])/(2*a[i-1])
+  c[i] = (p^2)*c[i-1] - ((p^2)*(b[i-1]^2))/(4*a[i-1])
+  d[i] = d[i-1] + c[i-1]*var_n
+  d1[i] = (1/i)
+  d2[i] = (p*b[i-1])/(2*a[i-1])
+}
+
+for (i in 2:(t+1)){ #Calculating optimal costs
+  B[i] = d1[t-i+2]*S[i-1] + d2[t-i+2]*X[i-1] #Order size
+  S[i] = S[i-1] - B[i] #Shares size
+  
+  X[i] = p*X[i-1] + n[i-1] #Information equation
+  P[i] = P[i-1] + o*B[i] + y*X[i] + e[i-1] #Price equation
+
+  V[i] = S[i-1]*P[i-1] + a[t-i+2]*(S[i-1]^2) + b[t-i+2]*X[i-1]*S[i-1] + c[t-i+2]*(X[i-1]^2) + d[t-i+2] #Expected cost
+  A[i] = A[i-1] + P[i]*B[i] #Actual cost
+}
+
+ DF_info = data.frame(`Period` = seq(0, t, 1),
+                    `Price` = P,
+                    `Shares Bought` = B,
+                    `Shares Remaining` = S,
+                    `Market Information` = y*X,
+                    `Accumulated Cost` = A,
+                    `Expected Cost` = V); DF_info
+
+ Parameters = data.frame(`a`=a,
+                         `b`=b,
+                         `c`=c,
+                         `d`=d,
+                         `d1`=d1,
+                         `d2`=d2); Parameters
+
+ cat("Actual Cost:", A[t+1], "\n")
+ cat("Expected Cost:", V[2], "\n")
+ cat("Improvement:", (V[2]-A[t+1])/S[1], "\n")
+
+Deviation2 = NULL; Deviation2[1] = 0
+
+for (i in 2:(t+1)){
+  if (i == 2){
+    Deviation2[i] = (V[i]-V[i+1])-(A[i]-0)
+  } else if (i == (t+1)){
+    Deviation2[i] = (V[i]-0)-(A[i]-A[i-1])
+  } else {
+    Deviation2[i] = (V[i]-V[i+1])-(A[i]-A[i-1])
+  }
+}
+
+# dev2 = ggplot() +
+#   geom_line(aes(x=seq(1, TIMES, 1), y=Deviation2[-1]), color='blue', linetype='dashed') +
+#   geom_hline(yintercept=0, color='black', linetype='solid',) +
+#   labs(x='Period', y='Deviation') + theme_classic(); dev2
+```
+
+# Additive Permanent Price Impact with Inforamtion, Auto-regressive Rho & Eta
+
+```{r}
+Periods = TIMES
+
+Price = NULL; Price[1] = 50
+Shares = NULL; Shares[1] = 100000
+Bought = NULL; Bought[1] = 0
+Information = NULL; Information[1] = 0
+Accumulated = NULL; Accumulated[1] = 0
+Expected = NULL; Expected[1] = 0
+
+var_n_hat = NULL; p_hat = NULL
+var_n_hat[1] = 0;  p_hat[1] = 0
+
+for (j in 2:(Periods+1)){
+
+  t = Periods - j + 2 #Time periods
+
+  P = NULL; P[1] = Price[j-1] #Price Vector
+  B = NULL; B[1] = 0 #Order vector
+  S = NULL; S[1] = Shares[j-1] #Share remaining vector
+  X = NULL; X[1] = Information[j-1] #Information vector
+  VV = NULL; VV[1] = 0 #Expected total cost vector
+  A = NULL; A[1] = 0 #Actual total cost vector
+
+  #Bellman parameters
+  a = NULL; a[1] = o
+  b = NULL; b[1] = y
+  c = NULL; c[1] = 0
+  d = NULL; d[1] = 0
+  d1 = NULL; d1[1] = 1
+  d2 = NULL; d2[1] = 0
+
+  for (i in 2:(t+1)){ #Calculating parameters
+    a[i] = Theta_hat[j-1]*(i+1)/(2*i)
+    b[i] = y + (Theta_hat[j-1]*Rho_hat[j-1]*b[i-1])/(2*a[i-1])
+    c[i] = (Rho_hat[j-1]^2)*c[i-1] - ((Rho_hat[j-1]^2)*(b[i-1]^2))/(4*a[i-1])
+    d[i] = d[i-1] + c[i-1]*(var_n_hat[j-1])
+    d1[i] = 1/i
+    d2[i] = (p_hat[j-1]*b[i-1])/(2*a[i-1])
+  }
+
+  for (i in 2:(t+1)) { #Calculating optimal costs
+    B[i] = d1[t-i+2]*S[i-1] + d2[t-i+2]*X[i-1] #Order size
+    S[i] = S[i-1] - B[i] #Shares size
+  
+    X[i] = p*X[i-1] + n[j-1] #Information equation
+    P[i] = P[i-1] + o*B[i] + y*X[i] + e[j-1] #Price equation
+
+    VV[i] = S[i-1]*P[i-1] + a[t-i+2]*(S[i-1]^2) + b[t-i+2]*X[i-1]*S[i-1] + c[t-i+2]*(X[i-1]^2) + d[t-i+2] #Expected cost
+    A[i] = A[i-1] + P[i]*B[i] #Actual cost
+  } 
+  
+  Bought[j] = B[2]
+  Shares[j] = S[2]
+
+  Information[j] = X[2]
+  Price[j] = P[2]
+  
+  Expected[j] = VV[2]
+  Accumulated[j] = Accumulated[j-1] + P[2]*B[2]
+
+  cov[j] = j*sum(Information[1:(j-1)]*Information[2:j]) - sum(Information[1:j])^2
+  #var[j] = sum(Information[1:j]^2)
+  var[j] = j*sum(Information[1:j]^2)-sum(Information[1:j])^2
+
+  p_hat[j] = cov[j]/var[j]
+  #var_n_hat[j] = ((var[j]^2)-(cov[j]^2))/(var[j])
+  var_n_hat[j] = (var[j]*(1-(p_hat[j]^2)))/(j^2)
+
+DF_auto = data.frame(`Period` = seq(0, Periods, 1),
+                     `Price` = Price,
+                     `Shares Bought` = Bought,
+                     `Shares Remaining` = Shares,
+                     `Market Information` = y*Information,
+                     `Accumulated Cost` = Accumulated,
+                     `Expected Cost` = Expected); DF_auto
+
+Autoregression = data.frame(`Predicted.Row`=p_hat,
+                            `Predicted.Variance.Eta`=var_n_hat,
+                            `Covariance`=cov,
+                            `Variance`= var); Autoregression
+ 
+cat("Actual Cost:", Accumulated[Periods+1], "\n")
+cat("Expected Cost:", Expected[2], "\n")
+cat("Improvement:", (Expected[2]-Accumulated[Periods+1])/Shares[1], "\n")
+
+Deviation3 = NULL; Deviation3[1] = 0
+
+for (i in 2:(Periods+1)){
+  if (i == 2){
+    Deviation3[i] = (V[i]-V[i+1])-(Accumulated[i]-0)
+  } else if (i == (Periods+1)){
+    Deviation3[i] = (V[i]-0)-(Accumulated[i]-Accumulated[i-1])
+  } else {
+    Deviation3[i] = (V[i]-V[i+1])-(Accumulated[i]-Accumulated[i-1])
+  }
+}
+
+# dev3 = ggplot() +
+#   geom_line(aes(x=seq(1, TIMES, 1), y=Deviation3[-1]), color='red', linetype='dashed') +
+#   geom_hline(yintercept=0, color='black', linetype='solid',) +
+#   labs(x='Period', y='Deviation') + theme_classic(); dev3
+```
+
+# Combined Graph
+
+```{r}
+dev = ggplot() +
+  geom_line(aes(x=seq(0, TIMES, 1), y=Deviation1), color='lightgreen', linetype='dashed') +
+  geom_line(aes(x=seq(0, TIMES, 1), y=Deviation2), color='lightblue', linetype='dashed') +
+  geom_line(aes(x=seq(0, TIMES, 1), y=Deviation3), color='pink', linetype='dashed') +
+  geom_hline(yintercept=0, color='black', linetype='solid') +
+  #geom_hline(yintercept=mean(Deviation1), color='darkgreen', linetype='solid') +
+  #geom_hline(yintercept=mean(Deviation2), color='darkblue', linetype='solid') +
+  #geom_hline(yintercept=mean(Deviation3), color='darkred', linetype='solid') +
+  geom_text(aes(x=0.85*TIMES, y=-70000, label=paste('Naive:', round(mean(Deviation1)))), color='lightgreen') +
+  geom_text(aes(x=0.85*TIMES, y=-100000, label=paste('Informed:', round(mean(Deviation2)))), color='lightblue') +
+  geom_text(aes(x=0.85*TIMES, y=-130000, label=paste('Autoregressive:', round(mean(Deviation3)))), color='pink') +
+  labs(x='Period', y='Deviation', color="Model") + theme_minimal(); dev
+```
+# Auto-regressive Parameters Convergence Graph
+
+```{r}
+p_con = ggplot(data=Autoregression) +
+  geom_line(aes(x=seq(0, TIMES, 1), y=Predicted.Row), color='red', linetype='dashed') +
+  geom_hline(yintercept=p, color='black', linetype='solid') +
+  labs(x='Period', y='Predicted Rho') + theme_minimal(); p_con
+
+var_n_con = ggplot(data=Autoregression) +
+  geom_line(aes(x=seq(0, TIMES, 1), y=Predicted.Variance.Eta), color='red', linetype='dashed') +
+  geom_hline(yintercept=var_n, color='black', linetype='solid') +
+  labs(x='Period', y='Predicted Variance Eta') + theme_minimal(); var_n_con
+```
+

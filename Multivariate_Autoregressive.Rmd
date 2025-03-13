@@ -1,0 +1,309 @@
+---
+title: "Multivariate"
+author: "Simeon Kolev"
+date: "`r Sys.Date()`"
+output: html_document
+---
+#Recursive Substituions
+```{r}
+e <- function(t){
+  scalar <- 1/(t+1)
+  return(scalar)
+}
+
+f <- function(t, theta,  gamma, Rho){ ##########################
+  if (t==1){
+    return(0)
+  }
+  else{
+  scalar <- gamma/(theta*(t))
+  sum <- 0
+  for (i in 0:(t-1)){
+    sum = sum + (t-1-i)*(Rho**(i+1))
+  }
+  return(scalar*sum)
+  }
+}
+  
+x <- function(t, Rho, eta){
+  if (t==0){
+    return(X0)
+  }
+  else {
+    constant <- (Rho**t)*X0
+    sum <- 0
+    for (i in 1:t){
+      sum = sum + (Rho**(i-1))*eta[t-i+1]
+      }
+    return(constant + sum)
+  }
+}
+
+s <- function(t, T, theta, gamma, Rho, eta){
+  if (t==0){
+    return(S0)
+  }
+  else {
+    constant <- S0*((T-t+1)/(T+1))
+    sum <- 0
+    for (i in 1:t){
+      scalar <- (T-t+1)/(T-i)
+      sum = sum + scalar*f(T-i+1, theta, gamma, Rho)*x(i-1, Rho, eta)
+      }
+    return(constant - sum)
+  }
+}
+
+b <- function(t, theta, gamma, Rho, eta){
+  if (t==0){
+    return(B0)
+  }
+  else{
+    order <- e(T-t)*s(t, T, theta, gamma, Rho, eta) + f(T-t, theta, gamma, Rho)*x(t, Rho, eta)
+    return(order)
+  }
+}
+
+p <- function(t, T, theta, gamma, Rho, epsilon, eta){
+  if (t==0){
+    return(P0)
+  }
+  else{
+    b_impact <- 0
+    x_impact <- 0
+    noise <- 0
+    for (i in 1:t){
+      b_impact = b_impact + b(i, theta, gamma, Rho, eta)
+      x_impact = x_impact + Rho*x(t-i, Rho, eta) + eta[t-i+1]
+      noise = noise + epsilon[t-i+1]
+    }
+    return(P0 + theta*b_impact + gamma*x_impact + noise)
+  }
+}
+```
+#OLS using solver
+```{r}
+# OLS Approximation of Parameters
+
+# True Parameters
+o = 5*(10^-5)
+y = 5*(10^0)
+p = 5*(10^-1)
+var_e = (0.125)^2
+var_n = 0.001
+
+# Initial Values
+P = NULL; P[1] = 50
+X = NULL; X[1] = 0
+B = NULL; B[1] = 0
+S = NULL; S[1] = 100000
+E = NULL; E[1] = 0
+N = NULL; N[1] = 0
+
+# Optimized Parameters
+Theta = NULL; Theta[1] = 0
+Gamma = NULL; Gamma[1] = 0
+Rho = NULL; Rho[1] = 0
+
+
+T = 20 # Time Periods
+
+for (i in 2:(T+1)){
+      
+  E[i] = rnorm(n=1, mean=0, sd=sqrt(var_e))
+  N[i] = rnorm(n=1, mean=0, sd=sqrt(var_n))
+  
+  B[i] = S[i-1]/(T-i+2) + f(t=T-i+2, o=Theta[i-1], y=Gamma[i-1], p=Rho[i-1])*X[i-1]
+  S[i] = S[i-1] - B[i]
+  
+  X[i] = p*X[i-1] + N[i]
+  P[i] = P[i-1] + o*B[i] + y*X[i] + E[i]
+
+  objective <- function(t, P, B, X, E, N, TP, par){
+    
+    P_hat = NULL; P_hat[1] = 50
+    X_hat = NULL; X_hat[1] = 0
+    
+    for (j in 2:t){
+      
+      P_hat[j] = P[j-1] + par[1]*B[j] + par[2]*X[j]
+      X_hat[j] = par[3]*X[j-1]
+    }
+    
+    error <- sum((P - P_hat)^2 + (X - X_hat)^2)
+    return(error)
+  }
+
+  results <- optim(t=i, P=P, B=B, X=X, E=E, N=N, TP=c(o, y, p), 
+                   par=c(Theta[i-1], Gamma[i-1], Rho[i-1]),
+                   fn=objective, method = "Nelder-Mead")
+  
+  Theta[i] = results$par[1]
+  Gamma[i] = results$par[2]
+  Rho[i] = results$par[3]
+}
+
+df = data.frame("Price"=P,
+                "Information"=X,
+                "Shares Bought"=B,
+                "Shares Outstanding"=S,
+                "Theta Hat"=Theta,
+                "Gamma Hat"=Gamma,
+                "Rho Hat"=Rho); df
+```
+
+```{r}
+# Recursive definition of f
+f <- function(t, o, y, p){
+  if (t==1){
+    return(0)
+  }
+  else{
+  scalar <- ifelse(is.nan(y/(o*(t))), 0, y/(o*(t)))
+  sum <- 0
+  for (i in 0:(t-1)){
+    sum = sum + (t-1-i)*(p**(i+1))
+  }
+  return(scalar*sum)
+  }
+}
+
+F = NULL
+for (i in 1:T){
+  F[i] = f(i, o=0.00005, y=5, p=0.5)
+}
+
+a = NULL; b = NULL; ff = NULL
+a[1] = 0.00005; b[1] = 5; ff[1] = 0
+
+for (i in 2:T){
+  a[i] = (a[1]*(i+1))/(2*(i))
+  b[i] = (b[1] + (a[1]*0.5*b[i-1])/(2*a[i-1]))
+  ff[i] = (0.5*b[i-1])/(2*a[i-1])
+}
+
+F
+ff
+```
+
+```{r}
+Cost = NULL
+
+for (s in 1:100){
+  set.seed(s)
+  # Time Periods
+  T = 20
+
+  # True Model Parameters
+  Theta = 0.00005; Gamma = 5; Rho = 0.5
+  var_epsilon = (0.125)^2; var_eta = 0.001
+
+  # Auto-regressive Model Parameters
+  Theta_hat = NULL; Gamma_hat = NULL; Rho_hat = NULL
+  Theta_hat[1] = 0;  Gamma_hat[1] = 0;  Rho_hat[1] = 0
+
+  # Initial Values
+  P = NULL; X = NULL; B = NULL; S = NULL;
+  P[1] = 50; X[1] = 0; B[1] = 0; S[1] = 100000
+
+  # Initial Randomness
+  #epsilon = NULL; eta = NULL
+  #epsilon[1] = 0; eta[1] = 0
+  
+  epsilon = rnorm(n=T, mean=0, sd=sqrt(var_epsilon)) #Epsilon (price noise) calibrated to be $0.125 or one 'tick' (per period)
+  eta = rnorm(n=T, mean=0, sd=sqrt(var_eta)) #Eta (information noise)
+  
+  for (t in 2:(T+1)){
+  
+    # Generating Randomness at t
+    #epsilon[t] = rnorm(1, 0, sqrt(var_epsilon))
+    #eta[t] = rnorm(1, 0, sqrt(var_eta))
+  
+    # Bellman parameters
+    a = NULL; b = NULL; f = NULL; 
+    a[1] = Theta_hat[t-1];  b[1] = Gamma_hat[t-1]; f[1] = 0
+  
+    for (i in 2:T){
+      a[i] = (Theta_hat[t-1]*(i+1))/(2*(i))
+      b[i] = Gamma_hat[t-1] + (Theta_hat[t-1]*Rho_hat[t-1]*b[i-1])/(2*a[i-1])
+      f[i] = (Rho_hat[t-1]*b[i-1])/(2*a[i-1])
+    }
+  
+    # Calculating B, S, X, P at t
+    B[t] = S[t-1]/(T-t+2) + ifelse(is.na(f[T-t+2]), 0, f[T-t+2])*X[t-1]
+    S[t] = S[t-1] - B[t]
+    X[t] = Rho*X[t-1] + eta[t-1]
+    P[t] = P[t-1] + Theta*B[t] + Gamma*X[t] + epsilon[t-1]
+  
+    if (t == 2) {
+      Rho_hat[t] = 0
+      Theta_hat[t] = 0
+      Gamma_hat[t] = 0
+      
+    } else{
+      # Solving p = Cov(X[t], X[t-1])/Var(X[t])
+      Rho_hat[t] = sum(X[2:t]*X[1:(t-1)])/sum(X[2:t]^2)
+  
+      # Solving A*x = b
+      A = matrix(c(sum(B[2:t]^2), sum(X[2:t]*B[2:t]),
+                   sum(X[2:t]*B[2:t]), sum(X[2:t]^2)), ncol=2)
+      b = matrix(c(sum((P[2:t]-P[1:(t-1)])*B[2:t]),
+                   sum((P[2:t]-P[1:(t-1)])*X[2:t])), ncol=1)
+      x = solve(A) %*% b
+      Theta_hat[t] = x[1]
+      Gamma_hat[t] = x[2]
+    }
+  }
+  Cost[s] = sum(P[2:(T+1)]*B[2:(T+1)])
+}
+
+Trial = data.frame("Price" = P, "Information" = X, "Shares Bought" = B, "Shares Outstanding" = S,
+                   "Theta Hat" = Theta_hat, "Gamma Hat" = Gamma_hat, "Rho Hat" = Rho_hat)
+
+Trial; cat("Total Execution Cost:", sum(P[2:(T+1)]*B[2:(T+1)]))
+```
+
+```{r}
+library(ggplot2)
+
+ggplot(Trial, aes(x=(0:T), y=Price, color=Information)) +
+  geom_line() +
+  geom_point(aes(size=Shares.Bought)) +
+  labs(x="Time", y="Price") + theme_minimal()
+
+ggplot(Trial, aes(x=(0:T) , y=Theta.Hat)) +
+  geom_line() + geom_hline(yintercept = Theta) + 
+  labs(x="Time", y="Theta Hat") + theme_minimal()
+
+ggplot(Trial, aes(x=(0:T), y=Gamma.Hat)) +
+  geom_line() + geom_hline(yintercept = Gamma) +
+  labs(x="Time", y="Gamma Hat") + theme_minimal()
+
+ggplot(Trial, aes(x=(0:T), y=Rho.Hat)) +
+  geom_line() + geom_hline(yintercept = Rho) +
+  labs(x="Time", y="Rho Hat") + theme_minimal()
+```
+
+```{r}
+Simulation = data.frame("Execution Cost" = Cost)
+ggplot(Simulation, aes(x=(1:100), y=Execution.Cost)) +
+  geom_line(linetype="dashed") + geom_hline(yintercept = mean(Cost)) + geom_hline(yintercept = 5258727, color="blue") +
+  geom_text(aes(x=15, y=mean(Cost)-2.25*sd(Cost), label=paste('Execution Cost:', round(mean(Cost))))) +
+  geom_text(aes(x=15, y=mean(Cost)-2.55*sd(Cost), label=paste('Variance:', round(var(Cost)/(100000^2), 7)))) +
+  geom_text(aes(x=50, y=mean(Cost)+2.25*sd(Cost), label=paste('Improvement:', 5258727-round(mean(Cost))))) +
+  labs(x="Simulation", y="Execution Cost") + theme_minimal()
+
+```
+
+```{r}
+ggplot(Trial, aes(x=(0:T), y=Shares.Bought)) +
+  geom_line() +
+  geom_point() +
+  labs(x="Time", y="Shares Bought") + theme_minimal()
+
+ggplot(Trial, aes(x=(0:T), y=Information)) +
+  geom_line() +
+  geom_point() +
+  labs(x="Time", y="Information") + theme_minimal()
+```
+

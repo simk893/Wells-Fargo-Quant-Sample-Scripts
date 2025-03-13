@@ -1,0 +1,186 @@
+---
+title: "Analysis"
+output: html_document
+date: "2024-05-06"
+---
+# Intial Parameters
+```{r}
+# DO NOT EXCEED 100 Simulations unless you have errands to run
+Simulations = 100; Periods = 20
+Shares = 100000; Price = 50
+Theta = 0.00005; Gamma = 5; Rho = 0.5
+Var_Epsilon = 0.015625; Var_Eta = 0.001
+```
+
+# Bellman Parameters
+```{r}
+bellman_parameters <- function(t, theta, gamma, rho, var_epsilon, var_eta){
+  df <- data.frame(matrix(ncol = 6, nrow = t))
+  df[1,] <- c(theta, gamma, 0, 0, 1, 0)
+  for (i in 2:t){
+    a <- theta*(i+1)/(2*i)
+    b <- gamma + theta*rho*df[i-1, 2]/(2*df[i-1, 1])
+    c <- (rho^2)*df[i-1, 3] - (rho^2)*(df[i-1, 2]^2)/(4*df[i-1, 1])
+    d <- df[i-1, 4] + df[i-1, 3]*var_eta
+    e <- 1/i
+    f <- rho*df[i-1,2]/(2*df[i-1, 1])
+    df[i,] <- c(a, b, c, d, e, f)
+  }
+  colnames(df) <- c('a', 'b', 'c', 'd', 'e', 'f')
+  return(df)
+}
+```
+```{r}
+#Example
+bellman_parameters(Periods, Theta, Gamma, Rho, Var_Epsilon, Var_Eta)
+```
+
+# Model Periods
+```{r}
+model_periods <- function(model, seed, periods, price, shares, theta, gamma, rho, var_epsilon, var_eta){
+  while(TRUE) {
+    set.seed(seed)
+    df <- data.frame(matrix(ncol = 13, nrow = periods+1))
+    colnames(df) <- c('Price', 'Shares_Outstanding', 'Shares_Bought', 'Information', 'Accumulated_Cost', 'Expected_Cost', 'Epsilon', 'Eta', 'Theta', 'Gamma', 'Rho', 'Var_Epsilon', 'Var_Eta')
+    epsilon <- rnorm(periods+1,0,sqrt(var_epsilon)); eta <- rnorm(periods+1,0,sqrt(var_eta))
+    if (model == 1){df[1,] <- c(price, shares, 0, 0, 0, 0, epsilon[1], eta[1], theta, 0, 0, var_epsilon, 0)}
+    else if (model == 2){df[1,] <- c(price, shares, 0, 0, 0, 0, epsilon[1], eta[1], theta, gamma, rho, var_epsilon, var_eta)}
+    else {df[1,] <- c(price, shares, 0, 0, 0, 0, epsilon[1], eta[1], 0, 0, 0, 0, 0)}
+    for (t in 2:(periods+1)){
+      bp <- bellman_parameters(periods, df[t-1,'Theta'], df[t-1,'Gamma'], df[t-1,'Rho'], df[t-1,'Var_Epsilon'], df[t-1,'Var_Eta'])
+      Information <- rho*df[t-1,'Information'] + eta[t-1]
+      Shares_Bought <- bp[periods-(t-2),'e']*df[t-1,'Shares_Outstanding'] + ifelse(is.na(bp[periods-(t-2),'f']), 0, bp[periods-(t-2),'f']*Information)
+      Shares_Outstanding <- df[t-1,'Shares_Outstanding'] - Shares_Bought
+      Price <- df[t-1,'Price'] + theta*Shares_Bought + gamma*Information + epsilon[t-1]
+      Accumulated_Cost <- df[t-1,'Accumulated_Cost'] + Price*Shares_Bought
+      Expected_Cost <- df[t-1,'Price']*df[t-1,'Shares_Outstanding'] + df[t-1,'Theta']*((df[t-1,'Shares_Outstanding']^2)/2)*((periods-(t-2)+1)/(periods-(t-2))) + (df[t-1,'Shares_Outstanding']/(periods-(t-2)+1))*((df[t-1,'Gamma']*df[t-1,'Information']/(1-df[t-1,'Rho'])))*((periods-(t-2))-((df[t-1,'Rho']-(df[t-1,'Rho']^(periods-(t-2)+1)))/(1-df[t-1,'Rho'])))
+      df[t,] <- c(Price, Shares_Outstanding, Shares_Bought, Information, Accumulated_Cost, Expected_Cost, epsilon[t], eta[t], df[t-1,'Theta'], df[t-1,'Gamma'], df[t-1,'Rho'], df[t-1,'Var_Epsilon'], df[t-1,'Var_Eta'])
+      if (model == 3 & t > 2){
+        A <- matrix(c(sum(df[2:t,'Shares_Bought']^2), sum(df[2:t,'Information']*df[2:t,'Shares_Bought']),
+                      sum(df[2:t,'Information']*df[2:t,'Shares_Bought']), sum(df[2:t,'Information']^2)), ncol=2)
+        b <- matrix(c(sum((df[2:t,'Price']-df[1:(t-1),'Price'])*df[2:t,'Shares_Bought']),
+                      sum((df[2:t,'Price']-df[1:(t-1),'Price'])*df[2:t,'Information'])), ncol=1)
+        tryCatch({
+          x <- solve(A) %*% b
+          df[t,'Theta'] <- x[1]
+          df[t,'Gamma'] <- x[2]
+          df[t,'Rho'] <- sum(df[2:t,'Information']*df[1:(t-1),'Information'])/sum(df[2:t,'Information']^2)
+          df[t,'Var_Epsilon'] <- sum((df[2:t,'Price'] - df[1:(t-1),'Price'] - df[t,'Theta']*df[2:t,'Shares_Bought'] -df[t,'Gamma']*df[2:t,'Information'])^2)/(t-1)
+          df[t,'Var_Eta'] <- sum((df[2:t,'Information'] - df[t,'Rho']*df[1:(t-1),'Information'])^2)/(t-1)
+        }, error = function(e) {
+          return(model_periods(3, seed+Simulations, periods, price, shares, theta, gamma, rho, var_epsilon, var_eta))
+        })
+      } else {}
+    }
+    break
+  }
+  return(df)
+}
+```
+
+# Simulations
+```{r}
+Data <- vector(mode='list',length=Simulations)
+for (s in 1:Simulations){
+  Naive <- model_periods(1, s, Periods, Price, Shares, Theta, Gamma, Rho, Var_Epsilon, Var_Eta)
+  Informed <- model_periods(2, s, Periods, Price, Shares, Theta, Gamma, Rho, Var_Epsilon, Var_Eta)
+  Auto_Regressive <- model_periods(3, s, Periods, Price, Shares, Theta, Gamma, Rho, Var_Epsilon, Var_Eta)
+  Data[[s]] <- list(Naive, Informed, Auto_Regressive)
+}
+```
+```{r}
+# Table Data
+Data[[1]][[1]]
+Data[[1]][[2]]
+Data[[1]][[3]]
+```
+
+# Summary
+```{r}
+Models <- vector(mode='list',length=3)
+names(Models) <- c('Naive','Informed','Auto_Regressive')
+for (m in 1:3){
+  Variables <- colnames(Data[[1]][[1]])
+  Estimates <- vector(mode='list',length=length(Variables))
+  names(Estimates) <- Variables
+  for (v in 1:length(Variables)){
+    df <- data.frame(matrix(ncol=Periods, nrow=Simulations))
+    for (t in 2:(Periods+1)){
+      colnames(df)[(t-1)] <- paste('Period', as.character(t-1))
+      for (s in 1:Simulations){
+        df[s,(t-1)] <- Data[[s]][[m]][t,Variables[v]]
+      }
+    }
+    Estimates[[v]] <- df
+  }
+  Models[[m]] <- Estimates
+}
+```
+
+#Averages & Variances
+```{r}
+AV <- vector(mode='list',length=length(Variables))
+names(AV) <- colnames(Data[[1]][[1]])
+for (v in 1:length(Variables)){
+  df <- data.frame(matrix(ncol=Periods, nrow=2*3))
+  colnames(df) <- paste('Period', 1:ncol(df))
+  rownames(df) <- paste(rep(c('Naive','Informed','Auto_Regressive'),each=2), rep(c('Mean','Variance'),3))
+  for (m in 1:3){
+    df[2*m-1,] <- unname(apply(Models[[m]][[Variables[v]]],2,mean))
+    df[2*m,] <- unname(apply(Models[[m]][[Variables[v]]],2,var))
+  }
+  AV[[v]] <- df
+}
+```
+
+# Summary Plots
+```{r}
+library(ggplot2)
+#Example
+Model <- 'Auto_Regressive'
+for (v in 1:length(Variables)){
+  Mean <- ggplot() + 
+    geom_line(aes(x=seq(1,Periods,1), y=unname(unlist(AV[[v]][paste('Naive', 'Mean'),])), color='Naive')) +
+    geom_line(aes(x=seq(1,Periods,1), y=unname(unlist(AV[[v]][paste('Informed', 'Mean'),])), color='Informed')) +
+    geom_line(aes(x=seq(1,Periods,1), y=unname(unlist(AV[[v]][paste('Auto_Regressive', 'Mean'),])), color='Auto_Regressive')) +
+    labs(x='Periods', y='Mean', title=Variables[v]) + 
+    scale_color_manual(name='Model', breaks=c('Naive', 'Informed', 'Auto_Regressive'),
+                       values=c('Naive'='lightgreen', 'Informed'='lightblue', 'Auto_Regressive'='pink')) + theme_minimal()
+   Variance <- ggplot() + 
+     geom_line(aes(x=seq(1,Periods,1), y=unname(unlist(AV[[v]][paste('Naive', 'Variance'),])), color='Naive')) +
+     geom_line(aes(x=seq(1,Periods,1), y=unname(unlist(AV[[v]][paste('Informed', 'Variance'),])), color='Informed')) +
+     geom_line(aes(x=seq(1,Periods,1), y=unname(unlist(AV[[v]][paste('Auto_Regressive', 'Variance'),])), color='Auto_Regressive')) +
+     labs(x='Periods', y='Variance', title=Variables[v]) + 
+     scale_color_manual(name='Model', breaks=c('Naive', 'Informed', 'Auto_Regressive'),
+                        values=c('Naive'='lightgreen', 'Informed'='lightblue', 'Auto_Regressive'='pink')) + theme_minimal()
+  print(Mean); print(Variance)
+}
+```
+
+# Comparison Plots
+```{r}
+library(ggplot2)
+#Example
+v1 <- 'Accumulated_Cost'
+v2 <- 'Expected_Cost'
+stat <- 'Mean'
+
+ggplot() + 
+  geom_line(aes(x=seq(1,Periods,1), y=unname(unlist(AV[[v1]][paste('Naive', stat),]))-rev(unname(unlist(AV[[v2]][paste('Naive', stat),]))), color='Naive')) +
+  geom_line(aes(x=seq(1,Periods,1), y=unname(unlist(AV[[v1]][paste('Informed', stat),]))-rev(unname(unlist(AV[[v2]][paste('Informed', stat),]))), color='Informed')) +
+  geom_line(aes(x=seq(1,Periods,1), y=unname(unlist(AV[[v1]][paste('Auto_Regressive', stat),]))-rev(unname(unlist(AV[[v2]][paste('Auto_Regressive', stat),]))), color='Auto_Regressive')) +
+  labs(x='Periods', y=stat, title=paste(v1,'vs',v2)) +  
+  scale_color_manual(name='Model',
+                     breaks=c('Naive', 'Informed', 'Auto_Regressive'),
+                     values=c('Naive'='lightgreen', 'Informed'='lightblue', 'Auto_Regressive'='pink')) + theme_minimal()
+```
+```{r}
+print(paste('Naive Average Execution Cost', round(AV$Accumulated_Cost[1,20],2)))
+print(paste('Informed Average Execution Cost', round(AV$Accumulated_Cost[3,20],2)))
+print(paste('Auto_Regressive Average Execution Cost', round(AV$Accumulated_Cost[5,20],2)))
+```
+```{r}
+print(paste('Naive Average Improvment', round((5262500-AV$Accumulated_Cost[1,20])/100000,4)))
+print(paste('Informed Average Improvment', round((5258727-AV$Accumulated_Cost[3,20])/100000,4)))
+print(paste('Auto_Regressive Average Improvment', round((5258727-AV$Accumulated_Cost[5,20])/100000,4)))
+```

@@ -1,0 +1,251 @@
+---
+title: "Simulations"
+author: "Simeon Kolev"
+date: "2024-5-06"
+output: html_document
+---
+# Setup
+
+```{r}
+library(ggplot2)
+
+#Simulation Parameters
+SIMULATIONS = 100
+Simulations = seq(1, SIMULATIONS, 1)
+TIMES = 20
+PRICE = 50
+SHARES = 100000
+
+#Model Parameters
+o = 5*(10^-5)
+y = 5*(10^0)
+p = 5*(10^-1)
+var_e = (0.125)^2
+var_n = 0.001
+```
+
+# Additive Permanent Price Impact
+
+```{r}
+Cost1 = NULL
+Improvement1 = NULL
+Theoretical1 = NULL
+
+for (s in 1:SIMULATIONS){ #100 simulations
+  set.seed(s)
+  t = TIMES #time periods
+
+  P = NULL; P[1] = PRICE #Price vector
+  B = NULL; B[1] = 0 #Order vector
+  S = NULL; S[1] = SHARES #Share remaining vector
+  V = NULL; V[1] = 0 #Expected total cost vector
+  A = NULL; A[1] = 0 #Actual total cost vector
+
+  e = rnorm(n=t, mean=0, sd=sqrt(var_e)) #Epsilon calibrated to be $0.125 or one 'tick' (per period)
+
+  for (i in 2:(t+1)){ #Calculating optimal order size
+    B[i] = S[i-1]/(t-i+2) #Order size
+    S[i] = S[i-1] - B[i] #Shares remaining
+  
+    P[i] = P[i-1] + o*B[i] + e[i-1] #Price equation
+  
+    V[i] = S[i-1]*P[i-1] + ((o*(S[i-1]^2))/(2))*((t-i+3)/(t-i+2)) #Expected cost
+    A[i] = A[i-1] + P[i]*B[i] #Actual cost
+  }
+
+  # DF = data.frame(`Period` = seq(0, t, 1),
+  #                 `Price` = P,
+  #                 `Shares Bought` = B,
+  #                 `Shares Remaining` = S,
+  #                 `Accumulated Cost` = A,
+  #                 `expected Cost` = V); DF
+
+  #cat("Actual Cost:", A[T+1], "\n")
+  #cat("Expected Cost:", V[2], "\n")
+  #cat("Improvement:", (V[2]-A[T+1])/S[1], "\n")
+  
+  Cost1[s] = A[t+1]
+  Improvement1[s] = (V[2]-A[t+1])/S[1]
+  Theoretical1 = V[2]
+}
+```
+
+# Additive Permanent Price Impact with Information
+
+```{r}
+Cost2 = NULL
+Improvement2 = NULL
+Theoretical2 = NULL
+
+for (s in 1:SIMULATIONS){ #100 simulations
+  set.seed(s)
+  t = TIMES #Time periods
+  
+  P = NULL; P[1] = PRICE #Price Vector
+  B = NULL; B[1] = 0 #Order vector
+  S = NULL; S[1] = SHARES #Share remaining vector
+  X = NULL; X[1] = 0 #Information vector
+  V = NULL; V[1] = 0 #Expected total cost vector
+  A = NULL; A[1] = 0 #Actual total cost vector
+
+  e = rnorm(n=t, mean=0, sd=sqrt(var_e)) #Epsilon (price noise) calibrated to be $0.125 or one 'tick' (per period)
+  n = rnorm(n=t, mean=0, sd=sqrt(var_n)) #Eta (information noise)
+
+  #Bellman parameters
+  a = NULL; a[1] = o
+  b = NULL; b[1] = y
+  c = NULL; c[1] = 0
+  d = NULL; d[1] = 0
+  d1 = NULL; d1[1] = 1
+  d2 = NULL; d2[1] = 0
+
+  for (i in 2:t){ #Calculating parameters
+    a[i] = (o*(i+1))/(2*i)
+    b[i] = y + (o*p*b[i-1])/(2*a[i-1])
+    c[i] = (p^2)*c[i-1] - ((p^2)*(b[i-1]^2))/(4*a[i-1])
+    d[i] = d[i-1] + c[i-1]*var_n
+    d1[i] = (1/i)
+    d2[i] = (p*b[i-1])/(2*a[i-1])
+  }
+
+  for (i in 2:(t+1)){ #Calculating optimal costs
+    B[i] = d1[t-i+2]*S[i-1] + d2[t-i+2]*X[i-1] #Order size
+    S[i] = S[i-1] - B[i] #Shares size
+  
+    X[i] = p*X[i-1] + n[i-1] #Information equation
+    P[i] = P[i-1] + o*B[i] + y*X[i] + e[i-1] #Price equation
+
+    V[i] = S[i-1]*P[i-1] + a[t-i+2]*(S[i-1]^2) + b[t-i+2]*X[i-1]*S[i-1] + c[t-i+2]*(X[i-1]^2) + d[t-i+2] #Expected cost
+    A[i] = A[i-1] + P[i]*B[i] #Actual cost
+  }
+
+  # DF = data.frame(`Period` = seq(0, t, 1),
+  #                 `Price` = P,
+  #                 `Shares Bought` = B,
+  #                 `Shares Remaining` = S,
+  #                 `Market Information` = y*X,
+  #                 `Accumulated Cost` = A,
+  #                 `Expected Cost` = V); DF
+# 
+#   Parameters = data.frame(`a`=a,
+#                           `b`=b,
+#                           `c`=c,
+#                           `d`=d,
+#                           `d1`=d1,
+#                           `d2`=d2); Parameters
+
+  #cat("Actual Cost:", A[t+1], "\n")
+  #cat("Expected Cost:", V[2], "\n")
+  #cat("Improvement:", (V[2]-A[t+1])/S[1], "\n")
+  
+  Cost2[s] = A[t+1]
+  Improvement2[s] = (V[2]-A[t+1])/S[1]
+  Theoretical2 = V[2]
+}
+```
+
+# Additive Permanent Price Impact with Information, Auto-regressive
+
+```{r}
+Cost = NULL
+
+for (s in 1:SIMULATIONS){
+  set.seed(s)
+  # Time Periods
+  T = 20
+
+  # True Model Parameters
+  Theta = o; Gamma = y; Rho = p
+
+  # Auto-regressive Model Parameters
+  Theta_hat = NULL; Gamma_hat = NULL; Rho_hat = NULL
+  Theta_hat[1] = 0;  Gamma_hat[1] = 0;  Rho_hat[1] = 0
+
+  # Initial Values
+  P = NULL; X = NULL; B = NULL; S = NULL;
+  P[1] = 50; X[1] = 0; B[1] = 0; S[1] = 100000
+
+  # Initial Randomness
+  #epsilon = NULL; eta = NULL
+  #epsilon[1] = 0; eta[1] = 0
+  
+  epsilon = rnorm(n=T, mean=0, sd=sqrt(var_e)) #Epsilon (price noise) calibrated to be $0.125 or one 'tick' (per period)
+  eta = rnorm(n=T, mean=0, sd=sqrt(var_n)) #Eta (information noise)
+  
+  for (t in 2:(T+1)){
+  
+    # Generating Randomness at t
+    #epsilon[t] = rnorm(1, 0, sqrt(var_epsilon))
+    #eta[t] = rnorm(1, 0, sqrt(var_eta))
+  
+    # Bellman parameters
+    a = NULL; b = NULL; f = NULL; 
+    a[1] = Theta_hat[t-1];  b[1] = Gamma_hat[t-1]; f[1] = 0
+  
+    for (i in 2:T){
+      a[i] = (Theta_hat[t-1]*(i+1))/(2*(i))
+      b[i] = Gamma_hat[t-1] + (Theta_hat[t-1]*Rho_hat[t-1]*b[i-1])/(2*a[i-1])
+      f[i] = (Rho_hat[t-1]*b[i-1])/(2*a[i-1])
+    }
+  
+    # Calculating B, S, X, P at t
+    B[t] = S[t-1]/(T-t+2) + ifelse(is.na(f[T-t+2]), 0, f[T-t+2])*X[t-1]
+    S[t] = S[t-1] - B[t]
+    X[t] = Rho*X[t-1] + eta[t-1]
+    P[t] = P[t-1] + Theta*B[t] + Gamma*X[t] + epsilon[t-1]
+  
+    if (t == 2) {
+      Rho_hat[t] = 0
+      Theta_hat[t] = 0
+      Gamma_hat[t] = 0
+      
+    } else{
+      # Solving p = Cov(X[t], X[t-1])/Var(X[t])
+      Rho_hat[t] = sum(X[2:t]*X[1:(t-1)])/sum(X[1:t]^2)
+  
+      # Solving A*x = b
+      A = matrix(c(sum(B[2:t]^2), sum(X[2:t]*B[2:t]),
+                   sum(X[2:t]*B[2:t]), sum(X[2:t]^2)), ncol=2)
+      b = matrix(c(sum((P[2:t]-P[1:(t-1)])*B[2:t]),
+                   sum((P[2:t]-P[1:(t-1)])*X[2:t])), ncol=1)
+      x = solve(A) %*% b
+      Theta_hat[t] = x[1]
+      Gamma_hat[t] = x[2]
+    }
+  }
+  Cost[s] = sum(P[2:(T+1)]*B[2:(T+1)])
+}
+
+#Trial = data.frame("Price" = P, "Information" = X, "Shares Bought" = B, "Shares Outstanding" = S,
+#                   "Theta Hat" = Theta_hat, "Gamma Hat" = Gamma_hat, "Rho Hat" = Rho_hat)
+
+#Trial; cat("Total Execution Cost:", sum(P[2:(T+1)]*B[2:(T+1)]))
+```
+
+# Combined Graph
+
+```{r}
+sim = ggplot()+
+  geom_line(aes(x=Simulations, y=Cost1, color='Naive'),linetype='dashed') + 
+  geom_line(aes(x=Simulations, y=Cost2, color='Informed'), linetype='dashed') + 
+  geom_line(aes(x=Simulations, y=Cost, color='Auto Regressive'), linetype='dashed') + 
+  geom_hline(yintercept=Theoretical1, color='black', linetype='solid') +
+  #geom_text(aes(x=0.15*SIMULATIONS, y=Theoretical1-sd(Cost3)*2.25, label=paste('Expected Cost:', round(Theoretical1))), color='green') +
+  geom_text(aes(x=0.13*SIMULATIONS, y=Theoretical1-sd(Cost)*2.25, label=paste('Total Cost:', round(mean(Cost1)))), color='lightgreen') +
+  geom_text(aes(x=0.13*SIMULATIONS, y=Theoretical1-sd(Cost)*2.85, label=paste('Variance:', round(var(Cost1)/(SHARES^2), 4))), color='lightgreen') +
+  geom_text(aes(x=0.13*SIMULATIONS, y=Theoretical1-sd(Cost)*2.55, label=paste('Improvement:', round((Theoretical1-mean(Cost1))/SHARES, 4))), color='lightgreen') +
+  #geom_text(aes(x=0.45*SIMULATIONS, y=Theoretical1-sd(Cost3)*2.25, label=paste('Expected Cost:', round(Theoretical2))), color='blue') +
+  geom_text(aes(x=0.50*SIMULATIONS, y=Theoretical1-sd(Cost)*2.25, label=paste('Total Cost:', round(mean(Cost2)))), color='lightblue') +
+  geom_text(aes(x=0.50*SIMULATIONS, y=Theoretical1-sd(Cost)*2.85, label=paste('Variance:', round(var(Cost2)/(SHARES^2), 4))), color='lightblue') +
+  geom_text(aes(x=0.50*SIMULATIONS, y=Theoretical1-sd(Cost)*2.55, label=paste('Improvement:', round((Theoretical1-mean(Cost2))/SHARES, 4))), color='lightblue') +
+  #geom_text(aes(x=0.75*SIMULATIONS, y=Theoretical1-sd(Cost3)*2.25, label=paste('Expected Cost:', round(Theoretical2))), color='red') +
+  geom_text(aes(x=0.87*SIMULATIONS, y=Theoretical1-sd(Cost)*2.25, label=paste('Total Cost:', round(mean(Cost)))), color='pink') +
+  geom_text(aes(x=0.87*SIMULATIONS, y=Theoretical1-sd(Cost)*2.85, label=paste('Variance:', round(var(Cost)/(SHARES^2), 4))), color='pink') +
+  geom_text(aes(x=0.87*SIMULATIONS, y=Theoretical1-sd(Cost)*2.55, label=paste('Improvement:', round((Theoretical1-mean(Cost))/SHARES, 4))), color='pink') +
+  labs(x='Simulation', y='Execution Cost', title="Model Performance Across Simulations") + 
+  scale_color_manual(name='Model',
+                     breaks=c('Naive', 'Informed', 'Auto Regressive'),
+                     values=c('Naive'='lightgreen', 'Informed'='lightblue', 'Auto Regressive'='pink')) + theme_minimal(); sim
+
+
+```
