@@ -1,0 +1,1 @@
+Here are a few scripts and notebooks I have created within the last year in Python and R. I have used these in academic and personal research projects in finance, applied statistics, and operations research.
